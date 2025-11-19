@@ -3,6 +3,8 @@ import pandas as pd
 import plots
 from datetime import datetime, timedelta
 import numpy as np
+import plotly.graph_objects as go
+import chatbot
 
 # --- Schneider Electric Branding Colors ---
 SCHNEIDER_GREEN = "#009E06"
@@ -104,99 +106,127 @@ tabs = st.tabs(
 
 # --- TAB 1: Real-Time Monitor ---
 with tabs[0]:
-    # --- ROW 1: Executive KPIs ---
-    # --- ZONE 1: Permanent Alert Banner (Critical Anomaly Detector) ---
+    left_col, right_col = st.columns([2, 1])
 
-    # Define current and forecast loads
-    current_load = 1250  # kW (placeholder)
-    forecast_load = 1100  # kW (placeholder)
+    with left_col:
+        # --- ZONE 1: Permanent Alert Banner (Critical Anomaly Detector) ---
 
-    # Calculate variance
-    variance_percent = ((current_load - forecast_load) / forecast_load) * 100
+        # Define current and forecast loads
+        current_load = 1250  # kW (placeholder)
+        forecast_load = 1100  # kW (placeholder)
 
-    # Display alert based on variance threshold
-    if variance_percent > 10:
-        st.error(
-            f"⚠️ **CRITICAL ANOMALY:** Total Site Consumption is **{variance_percent:.1f}% above forecast**. "
-            f"Predicted cost impact: +€450/day."
-        )
-    else:
-        st.success(
-            "✅ **System Normal:** Real-time consumption within predicted range."
-        )
+        # Calculate variance
+        variance_percent = ((current_load - forecast_load) / forecast_load) * 100
 
-    st.markdown("### Executive KPIs")
-
-    if not filtered_df.empty:
-        total_cost = filtered_df["Cost_EUR"].sum()
-        total_consumption = filtered_df["Consumption_kWh"].sum()
-        avg_cost_per_kwh = (
-            total_cost / total_consumption if total_consumption > 0 else 0
-        )
-
-        kpi1, kpi2, kpi3 = st.columns(3)
-
-        with kpi1:
-            st.metric(
-                label="💶 Total Cost (Period)",
-                value=f"€{total_cost:,.0f}",
-                delta=f"{market_increase}% market change",
+        # Display alert based on variance threshold
+        if variance_percent > 10:
+            st.error(
+                f"⚠️ **CRITICAL ANOMALY:** Total Site Consumption is **{variance_percent:.1f}% above forecast**. "
+                f"Predicted cost impact: +€450/day."
+            )
+        else:
+            st.success(
+                "✅ **System Normal:** Real-time consumption within predicted range."
             )
 
-        with kpi2:
-            st.metric(
-                label="⚡ Total Load (kWh)",
-                value=f"{total_consumption:,.0f}",
-                delta=f"{efficiency}% efficiency",
+        # --- SECTION: Currently Executed Actions & Recomputed Forecasts ---
+        st.markdown("---")
+        st.markdown("### Executed Actions & Updated Forecasts")
+
+        # Initialize session state for executed actions if not exists
+        if "executed_actions" not in st.session_state:
+            st.session_state.executed_actions = []
+
+        # Get executed actions from session state (these come from Tab 3 when user executes)
+        executed_actions_list = st.session_state.executed_actions
+
+        st.markdown("#### Executed Actions")
+
+        if executed_actions_list:
+            # Display executed actions in cards
+            for idx, action in enumerate(executed_actions_list):
+                st.markdown(
+                    f"""
+                    <div style='background-color: {LIGHT_GRAY}; padding: 15px; border-radius: 8px; text-align: center; margin-bottom: 10px;'>
+                        <h4 style='color: {SCHNEIDER_GRAY}; margin: 0;'>{action["name"]}</h4>
+                        <p style='color: {SCHNEIDER_GREEN}; margin: 10px 0 5px 0; font-size: 14px;'>Savings: €{action["savings"]:,}</p>
+                        <p style='color: {SCHNEIDER_GREEN}; margin: 0; font-size: 12px;'>Status: Active</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown("---")
+
+            # Calculate recomputed forecasts with executed actions
+            st.markdown("#### 📊 Recomputed Optimization Values")
+
+            # Use the encapsulated forecast comparison plot helper
+            import forecast_comparison_plot as fcp
+
+            fig_pi, baseline_month, actual_cost_month, efficiency_gain = (
+                fcp.build_forecast_comparison_plot(
+                    executed_actions_list,
+                    market_increase,
+                    SCHNEIDER_GREEN,
+                    SCHNEIDER_GRAY,
+                )
             )
 
-        with kpi3:
-            st.metric(
-                label="🌍 Estimated CO₂ (tCO₂)",
-                value=f"{total_consumption * 0.233 / 1000:,.1f}",
-                delta="Grid mix based",
-            )
-    else:
-        st.warning("No data available for the selected date range.")
+            st.plotly_chart(fig_pi, width="stretch")
 
-    # --- LIVE COMPONENT BREAKDOWN SECTION ---
-    st.markdown("---")
-    st.markdown("### 🔴 Live Component Breakdown")
+            metric_col1, metric_col2, metric_col3 = st.columns(3)
 
-    # Define component status and deltas
-    components = {
-        "Chillers": {"status": "Active", "delta": "+15%", "color": "#FF6B6B"},
-        "Compressors": {"status": "Normal", "delta": "0%", "color": "#3D3D3D"},
-        "Pumps": {"status": "Normal", "delta": "-2%", "color": "#51CF66"},
-        "Lighting": {"status": "Normal", "delta": "0%", "color": "#3D3D3D"},
-    }
+            with metric_col1:
+                st.metric(
+                    label="💰 Previous Baseline (Month)",
+                    value=f"€{baseline_month:,.0f}",
+                    delta="Before actions",
+                )
 
-    # Create 4 cards
-    card_cols = st.columns(4)
+            with metric_col2:
+                st.metric(
+                    label="📉 Recomputed Cost (Month)",
+                    value=f"€{actual_cost_month:,.0f}",
+                    delta=f"€{baseline_month - actual_cost_month:,.0f} saved",
+                    delta_color="inverse",
+                )
 
-    for idx, (component_name, component_data) in enumerate(components.items()):
-        with card_cols[idx]:
-            status = component_data["status"]
-            delta = component_data["delta"]
-            color = component_data["color"]
-
-            st.markdown(
-                f"""
-                <div style='background-color: {color}; padding: 20px; border-radius: 8px; text-align: center;'>
-                    <h4 style='color: white; margin: 0;'>{component_name}</h4>
-                    <p style='color: white; margin: 10px 0 5px 0; font-size: 18px; font-weight: bold;'>{status}</p>
-                    <p style='color: white; margin: 0; font-size: 16px;'>{delta}</p>
-                </div>
-                """,
-                unsafe_allow_html=True,
+            with metric_col3:
+                st.metric(
+                    label="⚡ Efficiency Gain",
+                    value=f"{efficiency_gain:.1f}%",
+                    delta="From executed actions",
+                )
+        else:
+            st.info(
+                "📌 No actions executed yet. Go to Tab 3 to execute optimization actions."
             )
 
-    # Insight text
-    st.markdown("---")
-    st.info(
-        "**Analysis:** Detected unexpected surge in Chiller Unit 2 starting at 08:00 AM. "
-        "Correlates with increased external temperature, but exceeds coefficient by 5%."
-    )
+    with right_col:
+        chatbot.render_chatbot()
+
+        # st.markdown(
+        #     f"""
+        #     <div style='background-color: {LIGHT_GRAY}; padding: 20px; border-radius: 8px; border: 2px solid {SCHNEIDER_GREEN}; height: 380px; overflow-y: auto;'>
+        #         <h4 style='color: {SCHNEIDER_GREEN}; margin: 0 0 15px 0;'>Energy Optimization Bot</h4>
+        #         <div style='background-color: white; padding: 10px; border-radius: 5px; margin-bottom: 10px;'>
+        #             <p style='color: {SCHNEIDER_GRAY}; margin: 0; font-size: 13px;'>👋 Hi! I'm your Energy Optimization Assistant. Ask me about:</p>
+        #             <ul style='color: {SCHNEIDER_GRAY}; font-size: 12px; margin: 10px 0 0 0;'>
+        #                 <li>Cost reduction strategies</li>
+        #                 <li>Equipment efficiency tips</li>
+        #                 <li>Action recommendations</li>
+        #                 <li>Alert analysis</li>
+        #             </ul>
+        #         </div>
+        #         <div style='text-align: center; padding: 20px;'>
+        #             <p style='color: {SCHNEIDER_GRAY}; font-size: 12px;'>Chat feature ready for integration</p>
+        #         </div>
+        #     </div>
+        #     """,
+        #     unsafe_allow_html=True,
+        # )
+
 
 # --- TAB 2: Cost & Forecast ---
 with tabs[1]:
@@ -320,11 +350,27 @@ with tabs[2]:
 
     # Execute button
     if st.button(
-        "EXECUTE OPTIMIZATION PLAN",
+        "🚀 EXECUTE OPTIMIZATION PLAN",
         type="primary",
         use_container_width=True,
     ):
-        st.toast("Optimization commands sent to PLCs!")
+        # Extract and store executed actions
+        executed_actions_list = []
+        for idx, row in edited_actions.iterrows():
+            if row["Apply?"]:
+                savings_str = row["Savings/Yr"].replace("€", "").replace(",", "")
+                try:
+                    savings_value = float(savings_str)
+                    executed_actions_list.append(
+                        {"name": row["Action Name"], "savings": savings_value}
+                    )
+                except ValueError:
+                    pass
+
+        # Store in session state
+        st.session_state.executed_actions = executed_actions_list
+
+        st.toast("✅ Optimization commands sent to PLCs!", icon="✅")
         st.success(
             f"**Optimization Plan Activated!**\n\n"
             f"- Actions applied: {edited_actions['Apply?'].sum()}\n"
