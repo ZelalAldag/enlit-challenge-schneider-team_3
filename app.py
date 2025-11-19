@@ -12,15 +12,9 @@ FONT_FAMILY = "'Segoe UI', 'Arial', sans-serif"
 
 # --- Streamlit Page Config ---
 st.set_page_config(
-    page_title="Schneider Energy Dashboard",
+    page_title="Energy Dashboard",
     layout="wide",
 )
-
-# --- Custom CSS for Branding ---
-
-
-# --- Main Title ---
-st.title("Schneider Electric | Real-time Energy Cost Management")
 
 
 # --- Data Function ---
@@ -50,11 +44,14 @@ def get_data():
 # --- Load Data ---
 data = get_data()
 
-# --- Global Date Range Filter (Sidebar) ---
+# --- SIDEBAR: Global Simulation Parameters ---
+st.sidebar.title("⚙️ Simulation Controls")
+st.sidebar.markdown("---")
+
+# Date Range Filter
+st.sidebar.subheader("📅 Date Range")
 min_date = data["Timestamp"].min().date()
 max_date = data["Timestamp"].max().date()
-st.sidebar.markdown("---")
-st.sidebar.subheader("Global Date Range")
 start_date = st.sidebar.date_input(
     "Start date",
     value=min_date,
@@ -71,120 +68,275 @@ end_date = st.sidebar.date_input(
     format="YYYY-MM-DD",
     key="end_date_selector",
 )
+
 # Ensure start_date <= end_date
 if start_date > end_date:
     st.sidebar.error("Start date must be before or equal to end date.")
+
 filtered_df = data[
     (data["Timestamp"].dt.date >= start_date) & (data["Timestamp"].dt.date <= end_date)
 ]
 
-# --- Sidebar Controls ---
-st.sidebar.title("Simulation Controls")
+# Market & Efficiency Sliders
+st.sidebar.markdown("---")
+st.sidebar.subheader("🎯 Market & Efficiency")
 market_increase = st.sidebar.slider("Market Price % Increase", 0, 50, 10, step=1)
 efficiency = st.sidebar.slider("Equipment Efficiency %", 80, 110, 100, step=1)
 
-# --- Tabs ---
+# --- MAIN CONTENT AREA ---
+
+# Header
+st.markdown(
+    f"<h1 style='color: {SCHNEIDER_GREEN};'> Real-time Energy Cost Management</h1>",
+    unsafe_allow_html=True,
+)
+
+
+# --- ROW 3: Tabbed Content ---
 tabs = st.tabs(
     [
-        "Cost & Consumption Breakdown",
-        "Budget Forecast & Simulation",
-        "Efficiency Actions",
+        "🔍 Real-Time Monitor",
+        "📈 Cost & Forecast",
+        "✅ Optimization Actions",
+        "🏭 Industrial Site Map",
     ]
 )
 
-# --- Tab 1: Breakdown ---
+# --- TAB 1: Real-Time Monitor ---
 with tabs[0]:
-    # Local Control: Resample Period
-    resample_map = {
-        "15 min": "15T",
-        "Hourly": "h",
-        "Daily": "D",
-        "Weekly": "W",
-        "Monthly": "M",
-    }
-    resample_period = st.selectbox(
-        "Resample Period",
-        options=list(resample_map.keys()),
-        index=1,
-        help="Affects only the line chart. Pie and scatter use raw filtered data.",
-    )
-    # Resample for line chart only
-    if not filtered_df.empty:
-        df_line = (
-            filtered_df.set_index("Timestamp")
-            .resample(resample_map[resample_period])
-            .sum(numeric_only=True)
-            .reset_index()
+    # --- ROW 1: Executive KPIs ---
+    # --- ZONE 1: Permanent Alert Banner (Critical Anomaly Detector) ---
+
+    # Define current and forecast loads
+    current_load = 1250  # kW (placeholder)
+    forecast_load = 1100  # kW (placeholder)
+
+    # Calculate variance
+    variance_percent = ((current_load - forecast_load) / forecast_load) * 100
+
+    # Display alert based on variance threshold
+    if variance_percent > 10:
+        st.error(
+            f"⚠️ **CRITICAL ANOMALY:** Total Site Consumption is **{variance_percent:.1f}% above forecast**. "
+            f"Predicted cost impact: +€450/day."
         )
     else:
-        df_line = filtered_df.copy()
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        fig1 = plots.create_line_chart(
-            df_line,
-            x="Timestamp",
-            y="Cost_EUR",
-            title="Energy Cost Over Time",
-            y_label="Cost (EUR)",
-            x_label="Time",
+        st.success(
+            "✅ **System Normal:** Real-time consumption within predicted range."
         )
-        st.plotly_chart(fig1, width="stretch")
-    with col2:
-        machine_cols = ["Chillers_kWh", "Compressors_kWh", "Polishing_kWh"]
-        machine_sums = filtered_df[machine_cols].sum()
-        pie_df = pd.DataFrame(
-            {"Machine": machine_cols, "Consumption": machine_sums.values}
-        )
-        fig2 = plots.create_pie_chart(
-            pie_df,
-            names="Machine",
-            values="Consumption",
-            title="Consumption Breakdown by Machine",
-        )
-        st.plotly_chart(fig2, width="stretch")
-    col3, col4 = st.columns([2, 1])
-    with col3:
-        fig3 = plots.create_scatter_plot(
-            filtered_df,
-            x="Consumption_kWh",
-            y="Reactive_Power_kVARh",
-            title="Consumption vs. Reactive Power",
-            y_label="Reactive Power (kVARh)",
-            x_label="Consumption (kWh)",
-        )
-        st.plotly_chart(fig3, width="stretch")
 
-# --- Tab 2: Forecast ---
-with tabs[1]:
-    # Calculate current and projected annual cost
-    avg_hourly_cost = filtered_df["Cost_EUR"].mean() if not filtered_df.empty else 0
-    current_annual_cost = avg_hourly_cost * 24 * 365
-    projected_annual_cost = (
-        current_annual_cost * (1 + market_increase / 100) * (100 / efficiency)
+    st.markdown("### Executive KPIs")
+
+    if not filtered_df.empty:
+        total_cost = filtered_df["Cost_EUR"].sum()
+        total_consumption = filtered_df["Consumption_kWh"].sum()
+        avg_cost_per_kwh = (
+            total_cost / total_consumption if total_consumption > 0 else 0
+        )
+
+        kpi1, kpi2, kpi3 = st.columns(3)
+
+        with kpi1:
+            st.metric(
+                label="💶 Total Cost (Period)",
+                value=f"€{total_cost:,.0f}",
+                delta=f"{market_increase}% market change",
+            )
+
+        with kpi2:
+            st.metric(
+                label="⚡ Total Load (kWh)",
+                value=f"{total_consumption:,.0f}",
+                delta=f"{efficiency}% efficiency",
+            )
+
+        with kpi3:
+            st.metric(
+                label="🌍 Estimated CO₂ (tCO₂)",
+                value=f"{total_consumption * 0.233 / 1000:,.1f}",
+                delta="Grid mix based",
+            )
+    else:
+        st.warning("No data available for the selected date range.")
+
+    # --- LIVE COMPONENT BREAKDOWN SECTION ---
+    st.markdown("---")
+    st.markdown("### 🔴 Live Component Breakdown")
+
+    # Define component status and deltas
+    components = {
+        "Chillers": {"status": "Active", "delta": "+15%", "color": "#FF6B6B"},
+        "Compressors": {"status": "Normal", "delta": "0%", "color": "#3D3D3D"},
+        "Pumps": {"status": "Normal", "delta": "-2%", "color": "#51CF66"},
+        "Lighting": {"status": "Normal", "delta": "0%", "color": "#3D3D3D"},
+    }
+
+    # Create 4 cards
+    card_cols = st.columns(4)
+
+    for idx, (component_name, component_data) in enumerate(components.items()):
+        with card_cols[idx]:
+            status = component_data["status"]
+            delta = component_data["delta"]
+            color = component_data["color"]
+
+            st.markdown(
+                f"""
+                <div style='background-color: {color}; padding: 20px; border-radius: 8px; text-align: center;'>
+                    <h4 style='color: white; margin: 0;'>{component_name}</h4>
+                    <p style='color: white; margin: 10px 0 5px 0; font-size: 18px; font-weight: bold;'>{status}</p>
+                    <p style='color: white; margin: 0; font-size: 16px;'>{delta}</p>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+    # Insight text
+    st.markdown("---")
+    st.info(
+        "**Analysis:** Detected unexpected surge in Chiller Unit 2 starting at 08:00 AM. "
+        "Correlates with increased external temperature, but exceeds coefficient by 5%."
     )
-    st.metric("Current Annual Cost (EUR)", f"{current_annual_cost:,.0f}")
-    st.metric("Projected Annual Cost (EUR)", f"{projected_annual_cost:,.0f}")
-    # Historical vs. Forecasted Cost
+
+# --- TAB 2: Cost & Forecast ---
+with tabs[1]:
+    st.subheader("Budget Forecast & Simulation")
+
+    # Prepare forecast data with three scenarios
     forecast_df = filtered_df.copy()
+
     if not forecast_df.empty:
-        forecast_df["Forecasted_Cost_EUR"] = (
+        # Historical Cost (baseline)
+        forecast_df["Historical_Cost_EUR"] = forecast_df["Cost_EUR"]
+
+        # Baseline Forecast (applies market price increase only)
+        forecast_df["Baseline_Forecast_EUR"] = forecast_df["Cost_EUR"] * (
+            1 + market_increase / 100
+        )
+
+        # Optimized Forecast (applies both market and efficiency gains)
+        forecast_df["Optimized_Forecast_EUR"] = (
             forecast_df["Cost_EUR"] * (1 + market_increase / 100) * (100 / efficiency)
         )
-    else:
-        forecast_df["Forecasted_Cost_EUR"] = []
+
+    # Create line chart with three scenarios
     fig4 = plots.create_line_chart(
         forecast_df,
         x="Timestamp",
-        y=["Cost_EUR", "Forecasted_Cost_EUR"],
-        title="Historical vs. Forecasted Cost",
+        y=["Historical_Cost_EUR", "Baseline_Forecast_EUR", "Optimized_Forecast_EUR"],
+        title="Cost Scenarios: Historical vs. Baseline vs. Optimized",
         y_label="Cost (EUR)",
         x_label="Time",
     )
     st.plotly_chart(fig4, width="stretch")
 
-# --- Tab 3: Actions ---
+    st.markdown("---")
+
+    # Calculate month-end projections (30 days)
+    if not forecast_df.empty:
+        baseline_daily_avg = forecast_df["Baseline_Forecast_EUR"].sum() / max(
+            1, len(forecast_df)
+        )
+        optimized_daily_avg = forecast_df["Optimized_Forecast_EUR"].sum() / max(
+            1, len(forecast_df)
+        )
+
+        baseline_month_end = baseline_daily_avg * 30
+        optimized_month_end = optimized_daily_avg * 30
+    else:
+        baseline_month_end = 45000
+        optimized_month_end = 38000
+
+    # Display month-end metrics
+    metric_col1, metric_col2 = st.columns(2)
+
+    with metric_col1:
+        st.metric(
+            label="Baseline Projected Month-End Cost ()",
+            value=f"€{baseline_month_end:,.0f}",
+            delta=f"{market_increase}% market increase",
+        )
+
+    with metric_col2:
+        savings = baseline_month_end - optimized_month_end
+        st.metric(
+            label="Optimized Projected Month-End Cost",
+            value=f"€{optimized_month_end:,.0f}",
+            delta=f"Save €{savings:,.0f}",
+            delta_color="inverse",
+        )
+
+# --- TAB 3: Optimization Actions ---
 with tabs[2]:
-    actions_df = pd.DataFrame(
+    st.subheader("Optimization Actions - Direct Response to Alert")
+
+    # Interactive Checklist for Optimization Actions
+    st.markdown("### Recommended Actions (Select to Apply)")
+
+    # Create optimization actions with actionable data
+    optimization_actions = pd.DataFrame(
+        {
+            "Apply?": [False, False],
+            "Action Name": [
+                "Shift Polishing to P6 (Off-Peak)",
+                "Fix Chiller Valve",
+            ],
+            "Investment": ["€0", "€500"],
+            "Savings/Yr": ["€5,200", "€2,100"],
+            "ROI": ["Immediate", "400%"],
+        }
+    )
+
+    # Create editable data editor
+    edited_actions = st.data_editor(
+        optimization_actions,
+        hide_index=True,
+        use_container_width=True,
+        key="optimization_editor",
+    )
+
+    # Calculate total savings based on checked items
+    total_savings = 0
+    for idx, row in edited_actions.iterrows():
+        if row["Apply?"]:
+            # Extract numeric value from savings string
+            savings_str = row["Savings/Yr"].replace("€", "").replace(",", "")
+            try:
+                savings_value = float(savings_str)
+                total_savings += savings_value
+            except ValueError:
+                pass
+
+    st.markdown("---")
+
+    # Display potential savings metric
+    st.metric(
+        label="Potential Savings (Selected Actions)",
+        value=f"€{total_savings:,.0f}",
+        delta="From checked actions",
+    )
+
+    st.markdown("---")
+
+    # Execute button
+    if st.button(
+        "EXECUTE OPTIMIZATION PLAN",
+        type="primary",
+        use_container_width=True,
+    ):
+        st.toast("Optimization commands sent to PLCs!")
+        st.success(
+            f"**Optimization Plan Activated!**\n\n"
+            f"- Actions applied: {edited_actions['Apply?'].sum()}\n"
+            f"- Expected annual savings: €{total_savings:,.0f}\n"
+            f"- Estimated execution time: 2-4 hours"
+        )
+
+    st.markdown("---")
+    st.markdown("### Extended Action Catalog")
+
+    # Extended actions catalog
+    extended_actions_df = pd.DataFrame(
         {
             "Action": [
                 "Upgrade Chillers",
@@ -201,14 +353,216 @@ with tabs[2]:
             "Carbon_Reduction_tCO2": [30, 22, 18, 15, 12, 8, 5],
         }
     )
-    top5 = actions_df.nlargest(5, "Est_Annual_Savings_EUR")
-    fig5 = plots.create_bar_chart(
-        top5,
-        x="Action",
-        y="Est_Annual_Savings_EUR",
-        title="Top 5 Actions by Savings",
-        y_label="Est. Annual Savings (EUR)",
-        x_label="Action",
+
+    st.dataframe(extended_actions_df, width="stretch", use_container_width=True)
+
+# --- TAB 4: Industrial Site Map ---
+with tabs[3]:
+    st.subheader("Industrial Site Map - Component Monitoring")
+
+    # Charts Section (moved from Tab 1)
+    st.markdown("### 📊 Consumption Breakdown & Analysis")
+
+    # Local Control: Resample Period
+    resample_map = {
+        "15 min": "15T",
+        "Hourly": "h",
+        "Daily": "D",
+        "Weekly": "W",
+        "Monthly": "M",
+    }
+    resample_period = st.selectbox(
+        "📊 Resample Period",
+        options=list(resample_map.keys()),
+        index=1,
+        help="Affects the line chart. Pie and scatter use raw filtered data.",
+        key="resample_tab4",
     )
-    st.plotly_chart(fig5, width="stretch")
-    st.dataframe(actions_df, width="stretch")
+
+    # Resample for line chart only
+    if not filtered_df.empty:
+        df_line = (
+            filtered_df.set_index("Timestamp")
+            .resample(resample_map[resample_period])
+            .sum(numeric_only=True)
+            .reset_index()
+        )
+    else:
+        df_line = filtered_df.copy()
+
+    col1, col2 = st.columns([2, 2])
+
+    with col1:
+        fig1 = plots.create_line_chart(
+            df_line,
+            x="Timestamp",
+            y="Consumption_kWh",
+            title="📈 Energy Consumption Over Time",
+            y_label="Consumption (kWh)",
+            x_label="Time",
+        )
+        st.plotly_chart(fig1, width="stretch")
+
+    with col2:
+        machine_cols = ["Chillers_kWh", "Compressors_kWh", "Polishing_kWh"]
+        machine_sums = filtered_df[machine_cols].sum()
+        pie_df = pd.DataFrame(
+            {"Machine": machine_cols, "Consumption": machine_sums.values}
+        )
+        fig2 = plots.create_pie_chart(
+            pie_df,
+            names="Machine",
+            values="Consumption",
+            title="⚙️ Historical Breakdown",
+        )
+        st.plotly_chart(fig2, width="stretch")
+
+    # Initialize session state for components if not exists
+    if "components" not in st.session_state:
+        st.session_state.components = {
+            "Chillers": {
+                "value": 245.50,
+                "unit": "kW",
+                "efficiency": "92%",
+                "year": 2019,
+            },
+            "Compressors": {
+                "value": 156.75,
+                "unit": "kW",
+                "efficiency": "85%",
+                "year": 2018,
+            },
+            "Polishing": {
+                "value": 98.25,
+                "unit": "kW",
+                "efficiency": "88%",
+                "year": 2020,
+            },
+        }
+
+    st.markdown("---")
+
+    # Display Industrial Site Diagram
+    st.markdown("### 📊 Real-Time Industrial Site Diagram")
+
+    # Calculate total load
+    total_load = sum(comp["value"] for comp in st.session_state.components.values())
+
+    # Create component boxes and diagram
+    diagram_col = st.columns(1)[0]
+
+    with diagram_col:
+        # Component Cards in a grid
+        num_cols = min(3, len(st.session_state.components))
+        component_cols = st.columns(num_cols)
+
+        for idx, (comp_name, comp_data) in enumerate(
+            st.session_state.components.items()
+        ):
+            col_idx = idx % num_cols
+            with component_cols[col_idx]:
+                st.markdown(
+                    f"""
+                    <div style='background-color: {SCHNEIDER_GREEN}; padding: 15px; border-radius: 8px; border: 2px solid {SCHNEIDER_GRAY};'>
+                        <h4 style='color: white; margin: 0;'>{comp_name}</h4>
+                        <p style='color: white; margin: 10px 0 5px 0; font-size: 24px; font-weight: bold;'>{comp_data["value"]:.2f} {comp_data["unit"]}</p>
+                        <p style='color: white; margin: 5px 0; font-size: 12px;'>Efficiency: {comp_data["efficiency"]}</p>
+                        <p style='color: white; margin: 0; font-size: 12px;'>Year: {comp_data["year"]}</p>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # Arrow/connector visualization
+        st.markdown(
+            f"""
+            <div style='text-align: center; margin: 20px 0;'>
+                <h3 style='color: {SCHNEIDER_GRAY}; margin: 0;'>⬇️ ⬇️ ⬇️</h3>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        # Total Load Box
+        st.markdown(
+            f"""
+            <div style='background-color: #FF6B6B; padding: 20px; border-radius: 8px; border: 3px solid {SCHNEIDER_GRAY}; text-align: center;'>
+                <h3 style='color: white; margin: 0;'>⚡ Total Site Load</h3>
+                <p style='color: white; margin: 10px 0 0 0; font-size: 32px; font-weight: bold;'>{total_load:.2f} kW</p>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("---")
+
+    # Component Management Section
+    st.markdown("### Component Management")
+
+    # Editable components table
+    components_df = pd.DataFrame(
+        [
+            {
+                "Component": name,
+                "Power (kW)": data["value"],
+                "Efficiency": data["efficiency"],
+                "Year": data["year"],
+                "% of Total": (
+                    f"{(data['value'] / total_load * 100):.1f}%"
+                    if total_load > 0
+                    else "0%"
+                ),
+            }
+            for name, data in st.session_state.components.items()
+        ]
+    )
+
+    st.dataframe(components_df, width="stretch", use_container_width=True)
+
+    # Add component form
+    col_add1, col_add2, col_add3, col_add4, col_add5 = st.columns([2, 1, 1, 1, 1])
+
+    with col_add1:
+        new_component_name = st.text_input(
+            "Component Name",
+            placeholder="e.g., Pump, Motor, Lighting",
+            key="new_comp_name",
+        )
+
+    with col_add2:
+        new_component_value = st.number_input(
+            "Power (kW)", min_value=0.0, value=50.0, step=1.0, key="new_comp_value"
+        )
+
+    with col_add3:
+        new_component_value_efficiency = st.text_input(
+            "Efficiency", value="90%", key="new_comp_efficiency"
+        )
+
+    with col_add4:
+        new_component_value_year = st.number_input(
+            "Year",
+            min_value=2000,
+            max_value=datetime.now().year,
+            value=2022,
+            step=1,
+            key="new_comp_year",
+        )
+
+    with col_add5:
+        st.text("")
+        if st.button("➕ Add Component", use_container_width=True):
+            if (
+                new_component_name
+                and new_component_name not in st.session_state.components
+            ):
+                st.session_state.components[new_component_name] = {
+                    "value": new_component_value,
+                    "unit": "kW",
+                    "efficiency": new_component_value_efficiency,
+                    "year": new_component_value_year,
+                }
+                st.toast(f"✅ {new_component_name} added successfully!")
+                st.rerun()
+            elif new_component_name in st.session_state.components:
+                st.warning("Component already exists!")

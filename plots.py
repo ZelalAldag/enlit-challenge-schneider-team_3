@@ -10,13 +10,21 @@ FONT_FAMILY = "'Segoe UI', 'Arial', sans-serif"
 # --- Line Chart ---
 def create_line_chart(df, x, y, title, y_label, x_label, color=None):
     if isinstance(y, list) and len(y) > 1:
+        # Define color sequence for multiple lines
+        colors = [SCHNEIDER_GREEN, "#FF6B6B", "#51CF66"]  # Green, Red, Light Green
         fig = px.line(
             df,
             x=x,
             y=y,
             title=title,
-            color_discrete_sequence=[SCHNEIDER_GREEN, SCHNEIDER_GRAY],
+            color_discrete_sequence=colors[: len(y)],
         )
+        # Update line styles: solid for first two, dotted for Baseline
+        if len(y) >= 2:
+            fig.data[0].line.dash = "solid"  # Historical - solid
+            fig.data[1].line.dash = "dash"  # Baseline - dotted
+            if len(y) >= 3:
+                fig.data[2].line.dash = "solid"  # Optimized - solid
     else:
         fig = px.line(
             df, x=x, y=y, title=title, color_discrete_sequence=[SCHNEIDER_GREEN]
