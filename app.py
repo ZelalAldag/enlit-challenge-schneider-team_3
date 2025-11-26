@@ -156,10 +156,8 @@ with tabs[0]:
                     unsafe_allow_html=True,
                 )
 
-            st.markdown("---")
-
             # Calculate recomputed forecasts with executed actions
-            st.markdown("#### 📊 Recomputed Optimization Values")
+            st.markdown("#### Recomputed Optimization Values")
 
             # Use the encapsulated forecast comparison plot helper
             import forecast_comparison_plot as fcp
@@ -173,7 +171,7 @@ with tabs[0]:
                 )
             )
 
-            st.plotly_chart(fig_pi, width="stretch")
+            # st.plotly_chart(fig_pi, width="stretch")
 
             metric_col1, metric_col2, metric_col3 = st.columns(3)
 
@@ -298,22 +296,38 @@ with tabs[1]:
 
 # --- TAB 3: Optimization Actions ---
 with tabs[2]:
-    st.subheader("Optimization Actions - Direct Response to Alert")
-
     # Interactive Checklist for Optimization Actions
     st.markdown("### Recommended Actions (Select to Apply)")
 
-    # Create optimization actions with actionable data
+    # Create optimization actions with actionable data (updated recommended actions)
     optimization_actions = pd.DataFrame(
         {
-            "Apply?": [False, False],
+            "Apply?": [False, False, False, False, False, False],
             "Action Name": [
-                "Shift Polishing to P6 (Off-Peak)",
-                "Fix Chiller Valve",
+                "Overall efficiency improvement (kWh ↓)",
+                "Peak-shaving (kW ↓)",
+                "Peak → off-peak shifting",
+                "Forecast-based peak avoidance",
+                "CO₂-aware shifting (price + CO₂)",
+                "RL-style flexible load control",
             ],
-            "Investment": ["€0", "€500"],
-            "Savings/Yr": ["€5,200", "€2,100"],
-            "ROI": ["Immediate", "400%"],
+            "Capex": [30000, 80000, 10000, 50000, 60000, 70000],
+            "Savings/Yr": [
+                10886.4,
+                27315.6,
+                -8991.8,
+                3196.7,
+                2611.3,
+                6273.3,
+            ],
+            "ROI": [
+                2.7,
+                2.9,
+                "-",
+                15.6,
+                22.9,
+                11.1,
+            ],
         }
     )
 
@@ -330,14 +344,12 @@ with tabs[2]:
     for idx, row in edited_actions.iterrows():
         if row["Apply?"]:
             # Extract numeric value from savings string
-            savings_str = row["Savings/Yr"].replace("€", "").replace(",", "")
+            savings_str = row["Savings/Yr"]
             try:
                 savings_value = float(savings_str)
                 total_savings += savings_value
             except ValueError:
                 pass
-
-    st.markdown("---")
 
     # Display potential savings metric
     st.metric(
@@ -345,8 +357,6 @@ with tabs[2]:
         value=f"€{total_savings:,.0f}",
         delta="From checked actions",
     )
-
-    st.markdown("---")
 
     # Execute button
     if st.button(
@@ -358,7 +368,7 @@ with tabs[2]:
         executed_actions_list = []
         for idx, row in edited_actions.iterrows():
             if row["Apply?"]:
-                savings_str = row["Savings/Yr"].replace("€", "").replace(",", "")
+                savings_str = row["Savings/Yr"]
                 try:
                     savings_value = float(savings_str)
                     executed_actions_list.append(
@@ -370,12 +380,11 @@ with tabs[2]:
         # Store in session state
         st.session_state.executed_actions = executed_actions_list
 
-        st.toast("✅ Optimization commands sent to PLCs!", icon="✅")
+        st.toast("Optimization commands sent to PLCs!", icon="✅")
         st.success(
             f"**Optimization Plan Activated!**\n\n"
             f"- Actions applied: {edited_actions['Apply?'].sum()}\n"
             f"- Expected annual savings: €{total_savings:,.0f}\n"
-            f"- Estimated execution time: 2-4 hours"
         )
 
     st.markdown("---")
@@ -405,9 +414,6 @@ with tabs[2]:
 # --- TAB 4: Industrial Site Map ---
 with tabs[3]:
     st.subheader("Industrial Site Map - Component Monitoring")
-
-    # Charts Section (moved from Tab 1)
-    st.markdown("### 📊 Consumption Breakdown & Analysis")
 
     # Local Control: Resample Period
     resample_map = {
@@ -450,165 +456,282 @@ with tabs[3]:
         st.plotly_chart(fig1, width="stretch")
 
     with col2:
-        machine_cols = ["Chillers_kWh", "Compressors_kWh", "Polishing_kWh"]
-        machine_sums = filtered_df[machine_cols].sum()
-        pie_df = pd.DataFrame(
-            {"Machine": machine_cols, "Consumption": machine_sums.values}
-        )
-        fig2 = plots.create_pie_chart(
-            pie_df,
-            names="Machine",
-            values="Consumption",
-            title="⚙️ Historical Breakdown",
-        )
-        st.plotly_chart(fig2, width="stretch")
+        import plotly.graph_objects as go
 
-    # Initialize session state for components if not exists
-    if "components" not in st.session_state:
-        st.session_state.components = {
-            "Chillers": {
-                "value": 245.50,
-                "unit": "kW",
-                "efficiency": "92%",
-                "year": 2019,
-            },
-            "Compressors": {
-                "value": 156.75,
-                "unit": "kW",
-                "efficiency": "85%",
-                "year": 2018,
-            },
-            "Polishing": {
-                "value": 98.25,
-                "unit": "kW",
-                "efficiency": "88%",
-                "year": 2020,
-            },
+        # Equipment Energy Distribution from Industrial Site Diagram
+        equipment_data = {
+            "Foundry": 3413,
+            "Air Extraction": 1439,
+            "Compressed Air": 785,
+            "Polishing": 792,
         }
 
-    st.markdown("---")
+        # Green gradient colors matching the cards
+        equipment_colors = ["#4D9B7F", "#5FCF80", "#7ED9A5", "#B8E6CF"]
 
-    # Display Industrial Site Diagram
-    st.markdown("### 📊 Real-Time Industrial Site Diagram")
-
-    # Calculate total load
-    total_load = sum(comp["value"] for comp in st.session_state.components.values())
-
-    # Create component boxes and diagram
-    diagram_col = st.columns(1)[0]
-
-    with diagram_col:
-        # Component Cards in a grid
-        num_cols = min(3, len(st.session_state.components))
-        component_cols = st.columns(num_cols)
-
-        for idx, (comp_name, comp_data) in enumerate(
-            st.session_state.components.items()
-        ):
-            col_idx = idx % num_cols
-            with component_cols[col_idx]:
-                st.markdown(
-                    f"""
-                    <div style='background-color: {SCHNEIDER_GREEN}; padding: 15px; border-radius: 8px; border: 2px solid {SCHNEIDER_GRAY};'>
-                        <h4 style='color: white; margin: 0;'>{comp_name}</h4>
-                        <p style='color: white; margin: 10px 0 5px 0; font-size: 24px; font-weight: bold;'>{comp_data["value"]:.2f} {comp_data["unit"]}</p>
-                        <p style='color: white; margin: 5px 0; font-size: 12px;'>Efficiency: {comp_data["efficiency"]}</p>
-                        <p style='color: white; margin: 0; font-size: 12px;'>Year: {comp_data["year"]}</p>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
+        # Create pie chart
+        fig2 = go.Figure(
+            data=[
+                go.Pie(
+                    labels=list(equipment_data.keys()),
+                    values=list(equipment_data.values()),
+                    marker=dict(
+                        colors=equipment_colors, line=dict(width=0)  # No borders
+                    ),
+                    textposition="inside",
+                    textfont=dict(
+                        size=14, color="white", family="Arial", weight="bold"
+                    ),
+                    texttemplate="%{label}<br>%{value:,} MWh<br>%{percent}",
+                    hovertemplate="<b>%{label}</b><br>%{value:,} MWh<br>%{percent}<extra></extra>",
                 )
-
-        # Arrow/connector visualization
-        st.markdown(
-            f"""
-            <div style='text-align: center; margin: 20px 0;'>
-                <h3 style='color: {SCHNEIDER_GRAY}; margin: 0;'>⬇️ ⬇️ ⬇️</h3>
-            </div>
-            """,
-            unsafe_allow_html=True,
+            ]
         )
 
-        # Total Load Box
-        st.markdown(
-            f"""
-            <div style='background-color: #FF6B6B; padding: 20px; border-radius: 8px; border: 3px solid {SCHNEIDER_GRAY}; text-align: center;'>
-                <h3 style='color: white; margin: 0;'>⚡ Total Site Load</h3>
-                <p style='color: white; margin: 10px 0 0 0; font-size: 32px; font-weight: bold;'>{total_load:.2f} kW</p>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        fig2.update_layout(
+            title=dict(
+                text="⚙️ Equipment Energy Distribution",
+                font=dict(size=20, color="#4A9B7F"),
+                x=0.05,
+            ),
+            showlegend=True,
+            legend=dict(orientation="v", x=1.05, y=0.5, font=dict(size=12)),
+            height=400,
+            margin=dict(l=20, r=150, t=60, b=20),
+            paper_bgcolor="white",
         )
+
+        st.plotly_chart(fig2, width="stretch")
 
     st.markdown("---")
 
-    # Component Management Section
-    st.markdown("### Component Management")
+    # Display Industrial Flow Diagram with HTML Component
+    st.markdown(
+        """
+    <style>
+      .energy-diagram {
+        width: 100%;
+        padding: 30px 0;
+        background: white;
+      }
+      
+      .diagram-title {
+        color: #2D8B5F;
+        font-size: 24px;
+        font-weight: bold;
+        margin-bottom: 30px;
+      }
+      
+      .equipment-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 2%;
+        margin-bottom: 20px;
+      }
+      
+      .eq-card {
+        width: 23%;
+        padding: 24px;
+        border-radius: 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+      }
+      
+      .eq-card .icon {
+        font-size: 28px;
+        margin-bottom: 10px;
+      }
+      
+      .eq-card .name {
+        font-size: 16px;
+        font-weight: bold;
+        margin: 8px 0;
+      }
+      
+      .eq-card .value {
+        font-size: 24px;
+        font-weight: bold;
+        margin: 8px 0;
+      }
+      
+      .eq-card .percent {
+        font-size: 12px;
+        opacity: 0.9;
+      }
+      
+      .flow-lines {
+        margin: 0 auto;
+        display: block;
+      }
+      
+      .total-card {
+        width: 70%;
+        margin: 20px auto 0;
+        padding: 30px;
+        background: #FF7B7B;
+        border-radius: 12px;
+        text-align: center;
+        color: white;
+        box-shadow: 0 6px 20px rgba(255,107,107,0.2);
+      }
+      
+      .total-card .icon {
+        font-size: 32px;
+      }
+      
+      .total-card .title {
+        font-size: 18px;
+        font-weight: bold;
+        margin: 10px 0;
+      }
+      
+      .total-card .total-value {
+        font-size: 48px;
+        font-weight: bold;
+      }
+    </style>
+    
+    <div class="energy-diagram">
+      <h3 class="diagram-title">Real-Time Industrial Site Diagram</h3>
+      
+      <div class="equipment-row">
+        <div class="eq-card" style="background:#3CBC8D">
+          <div class="icon">🏭</div>
+          <div class="name">Foundry</div>
+          <div class="value">3,413 MWh</div>
+          <div class="percent">39% of total</div>
+        </div>
+        <div class="eq-card" style="background:#51CF66">
+          <div class="icon">💨</div>
+          <div class="name">Air Extraction</div>
+          <div class="value">1,439 MWh</div>
+          <div class="percent">16% of total</div>
+        </div>
+        <div class="eq-card" style="background:#7ED9A5">
+          <div class="icon">⚙️</div>
+          <div class="name">Compressed Air</div>
+          <div class="value">785 MWh</div>
+          <div class="percent">9% of total</div>
+        </div>
+        <div class="eq-card" style="background:#B8E6CF">
+          <div class="icon">✨</div>
+          <div class="name">Polishing</div>
+          <div class="value">792 MWh</div>
+          <div class="percent">9% of total</div>
+        </div>
+      </div>
+      
+      <svg class="flow-lines" width="100%" height="200" viewBox="0 0 1000 200">
+        <line x1="120" y1="0" x2="500" y2="80" stroke="#3CBC8D" stroke-width="3"/>
+        <line x1="370" y1="0" x2="500" y2="80" stroke="#51CF66" stroke-width="3"/>
+        <line x1="620" y1="0" x2="500" y2="80" stroke="#7ED9A5" stroke-width="3"/>
+        <line x1="870" y1="0" x2="500" y2="80" stroke="#B8E6CF" stroke-width="3"/>
+        <circle cx="500" cy="80" r="10" fill="#4DABF7"/>
+        <line x1="500" y1="80" x2="500" y2="200" stroke="#4DABF7" stroke-width="4"/>
+      </svg>
+      
+      <div class="total-card">
+        <div class="icon">⚡</div>
+        <div class="title">Total Site Energy Consumption</div>
+        <div class="total-value">6,429 MWh</div>
+      </div>
+    </div>
+    """,
+        unsafe_allow_html=True,
+    )
 
-    # Editable components table
+    st.markdown("---")
+    st.markdown("### 📋 Component Management")
+
+    # Component data based on Industrial Site Diagram
+    components_data = {
+        "Foundry": {
+            "energy": 3413,
+            "unit": "MWh",
+            "efficiency": "92%",
+            "year": 2019,
+            "percent": 39,
+        },
+        "Air Extraction": {
+            "energy": 1439,
+            "unit": "MWh",
+            "efficiency": "85%",
+            "year": 2018,
+            "percent": 16,
+        },
+        "Compressed Air": {
+            "energy": 785,
+            "unit": "MWh",
+            "efficiency": "88%",
+            "year": 2020,
+            "percent": 9,
+        },
+        "Polishing": {
+            "energy": 792,
+            "unit": "MWh",
+            "efficiency": "89%",
+            "year": 2021,
+            "percent": 9,
+        },
+    }
+
+    # Create components table
     components_df = pd.DataFrame(
         [
             {
-                "Component": name,
-                "Power (kW)": data["value"],
+                "Equipment": name,
+                "Energy": f"{data['energy']:,} {data['unit']}",
                 "Efficiency": data["efficiency"],
                 "Year": data["year"],
-                "% of Total": (
-                    f"{(data['value'] / total_load * 100):.1f}%"
-                    if total_load > 0
-                    else "0%"
-                ),
+                "% of Total": f"{data['percent']}%",
             }
-            for name, data in st.session_state.components.items()
+            for name, data in components_data.items()
         ]
     )
 
     st.dataframe(components_df, width="stretch", use_container_width=True)
 
-    # Add component form
-    col_add1, col_add2, col_add3, col_add4, col_add5 = st.columns([2, 1, 1, 1, 1])
+    st.markdown("---")
 
-    with col_add1:
+    # Add/Edit component form
+    st.markdown("#### ➕ Add or Update Component")
+
+    col_form1, col_form2, col_form3, col_form4, col_form5 = st.columns(
+        [2, 1.5, 1.5, 1.5, 1.5]
+    )
+
+    with col_form1:
         new_component_name = st.text_input(
-            "Component Name",
+            "Equipment Name",
             placeholder="e.g., Pump, Motor, Lighting",
-            key="new_comp_name",
+            key="new_eq_name",
         )
 
-    with col_add2:
-        new_component_value = st.number_input(
-            "Power (kW)", min_value=0.0, value=50.0, step=1.0, key="new_comp_value"
+    with col_form2:
+        new_component_energy = st.number_input(
+            "Energy (MWh)", min_value=0.0, value=500.0, step=50.0, key="new_eq_energy"
         )
 
-    with col_add3:
-        new_component_value_efficiency = st.text_input(
-            "Efficiency", value="90%", key="new_comp_efficiency"
+    with col_form3:
+        new_component_efficiency = st.text_input(
+            "Efficiency", value="90%", key="new_eq_efficiency"
         )
 
-    with col_add4:
-        new_component_value_year = st.number_input(
+    with col_form4:
+        new_component_year = st.number_input(
             "Year",
             min_value=2000,
             max_value=datetime.now().year,
             value=2022,
             step=1,
-            key="new_comp_year",
+            key="new_eq_year",
         )
 
-    with col_add5:
+    with col_form5:
         st.text("")
-        if st.button("➕ Add Component", use_container_width=True):
-            if (
-                new_component_name
-                and new_component_name not in st.session_state.components
-            ):
-                st.session_state.components[new_component_name] = {
-                    "value": new_component_value,
-                    "unit": "kW",
-                    "efficiency": new_component_value_efficiency,
-                    "year": new_component_value_year,
-                }
-                st.toast(f"✅ {new_component_name} added successfully!")
-                st.rerun()
-            elif new_component_name in st.session_state.components:
-                st.warning("Component already exists!")
+        if st.button("➕ Add Equipment", use_container_width=True):
+            if new_component_name:
+                st.success(f"✅ {new_component_name} added successfully!")
+            else:
+                st.warning("Please enter an equipment name!")
